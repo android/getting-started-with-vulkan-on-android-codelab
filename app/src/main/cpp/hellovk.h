@@ -194,6 +194,8 @@ class HelloVK {
   void createDescriptorSetLayout();
   void createGraphicsPipeline();
   void createFramebuffers();
+  void createCommandPool();
+  void createCommandBuffer();
   void createSyncObjects();
   QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
   bool checkDeviceExtensionSupport(VkPhysicalDevice device);
@@ -245,6 +247,8 @@ class HelloVK {
   VkExtent2D displaySizeIdentity;
   std::vector<VkImageView> swapChainImageViews;
   std::vector<VkFramebuffer> swapChainFramebuffers;
+  VkCommandPool commandPool;
+  std::vector<VkCommandBuffer> commandBuffers;
 
   VkQueue graphicsQueue;
   VkQueue presentQueue;
@@ -282,6 +286,8 @@ void HelloVK::initVulkan() {
   createDescriptorSets();
   createGraphicsPipeline();
   createFramebuffers();
+  createCommandPool();
+  createCommandBuffer();
   createSyncObjects();
   initialized = true;
 }
@@ -1045,6 +1051,26 @@ void HelloVK::createFramebuffers() {
     VK_CHECK(vkCreateFramebuffer(device, &framebufferInfo, nullptr,
                                  &swapChainFramebuffers[i]));
   }
+}
+
+void HelloVK::createCommandPool() {
+  QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
+  VkCommandPoolCreateInfo poolInfo{};
+  poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+  poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
+  VK_CHECK(vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool));
+}
+
+void HelloVK::createCommandBuffer() {
+  commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+  VkCommandBufferAllocateInfo allocInfo{};
+  allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  allocInfo.commandPool = commandPool;
+  allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  allocInfo.commandBufferCount = commandBuffers.size();
+
+  VK_CHECK(vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.data()));
 }
 
 void HelloVK::createSyncObjects() {
