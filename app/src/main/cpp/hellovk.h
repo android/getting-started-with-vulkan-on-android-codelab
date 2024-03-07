@@ -30,6 +30,10 @@
 #include <string>
 #include <vector>
 
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
 /**
  * HelloVK contains the core of Vulkan pipeline setup. It includes recording
  * draw commands as well as screen clearing during the render pass.
@@ -54,7 +58,7 @@ namespace vkt {
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
 struct UniformBufferObject {
-  std::array<float, 16> mvp;
+  glm::mat4 mvp;
 };
 
 struct QueueFamilyIndices {
@@ -469,18 +473,26 @@ void HelloVK::render() {
  */
 void getPrerotationMatrix(const VkSurfaceCapabilitiesKHR &capabilities,
                           const VkSurfaceTransformFlagBitsKHR &pretransformFlag,
-                          std::array<float, 16> &mat) {
+                          glm::mat4 &mat, float ratio) {
   // mat is initialized to the identity matrix
-  mat = {1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1.};
+  mat = glm::mat4(1.0f);
+  
   if (pretransformFlag & VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR) {
-    // mat is set to a 90 deg rotation matrix
-    mat = {0., 1., 0., 0., -1., 0, 0., 0., 0., 0., 1., 0., 0., 0., 0., 1.};
+    // mat is set to a 90 deg rotation matrix around Z axis
+    mat = glm::rotate(mat, glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+  }
+  else if (pretransformFlag & VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR) {
+    // mat is set to 270 deg rotation matrix around Z axis
+    mat = glm::rotate(mat, glm::radians(270.0f), glm::vec3(0.0f, 0.0f, 1.0f));
   }
 
-  else if (pretransformFlag & VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR) {
-    // mat is set to 270 deg rotation matrix
-    mat = {0., -1., 0., 0., 1., 0, 0., 0., 0., 0., 1., 0., 0., 0., 0., 1.};
-  }
+  // scale by screen ratio
+  mat = glm::scale(mat, glm::vec3(1.0f, ratio, 1.0f));
+
+  // rotate 1 degree every function call.
+  static float currentAngleDegrees = 0.0f;
+  currentAngleDegrees += 1.0f;
+  mat = glm::rotate(mat, glm::radians(currentAngleDegrees), glm::vec3(0.0f, 0.0f, 1.0f));
 }
 
 void HelloVK::createDescriptorPool() {
@@ -532,12 +544,13 @@ void HelloVK::updateUniformBuffer(uint32_t currentImage) {
   SwapChainSupportDetails swapChainSupport =
       querySwapChainSupport(physicalDevice);
   UniformBufferObject ubo{};
+  float ratio = (float)swapChainExtent.width / (float)swapChainExtent.height; 
   getPrerotationMatrix(swapChainSupport.capabilities, pretransformFlag,
-                       ubo.mvp);
+                       ubo.mvp, ratio);
   void *data;
   vkMapMemory(device, uniformBuffersMemory[currentImage], 0, sizeof(ubo), 0,
               &data);
-  memcpy(data, &ubo, sizeof(ubo));
+  memcpy(data, glm::value_ptr(ubo.mvp), sizeof(glm::mat4));
   vkUnmapMemory(device, uniformBuffersMemory[currentImage]);
 }
 
@@ -854,7 +867,7 @@ void HelloVK::pickPhysicalDevice() {
 
   assert(physicalDevice != VK_NULL_HANDLE);  // failed to find a suitable GPU!
 }
-// // END DEVICE SUITABILITY
+// END DEVICE SUITABILITY
 
 void HelloVK::createLogicalDeviceAndQueue() {
   QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
