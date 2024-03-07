@@ -73,10 +73,12 @@ static void HandleCmd(struct android_app *app, int32_t cmd) {
       break;
     case APP_CMD_TERM_WINDOW:
       // The window is being hidden or closed, clean it up.
+      engine->canRender = false;
       break;
     case APP_CMD_DESTROY:
       // The window is being hidden or closed, clean it up.
       LOGI("Destroying");
+      engine->app_backend->cleanup();
     default:
       break;
   }
@@ -144,5 +146,6 @@ void android_main(struct android_app *state) {
 
     HandleInputEvents(state);
 
+    engine.app_backend->render();
   }
 }
