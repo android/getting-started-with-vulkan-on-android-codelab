@@ -51,6 +51,8 @@ namespace vkt {
     }                                         \
   } while (0)
 
+const int MAX_FRAMES_IN_FLIGHT = 2;
+
 struct QueueFamilyIndices {
   std::optional<uint32_t> graphicsFamily;
   std::optional<uint32_t> presentFamily;
@@ -155,6 +157,9 @@ static void DestroyDebugUtilsMessengerEXT(
 class HelloVK {
  public:
   void initVulkan();
+  void cleanup();
+  void cleanupSwapChain();
+  void reset(ANativeWindow *newWindow, AAssetManager *newManager);
   bool initialized = false;
 
  private:
@@ -164,12 +169,15 @@ class HelloVK {
   void setupDebugMessenger();
   void pickPhysicalDevice();
   void createLogicalDeviceAndQueue();
+  void createSwapChain();
+  void createSyncObjects();
   QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
   bool checkDeviceExtensionSupport(VkPhysicalDevice device);
   bool isDeviceSuitable(VkPhysicalDevice device);
   bool checkValidationLayerSupport();
   std::vector<const char *> getRequiredExtensions(bool enableValidation);
   SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
+  void recreateSwapChain();
   void establishDisplaySizeIdentity();
 
   /*
@@ -197,10 +205,19 @@ class HelloVK {
   VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
   VkDevice device;
 
+  VkSwapchainKHR swapChain;
+  std::vector<VkImage> swapChainImages;
+  VkFormat swapChainImageFormat;
+  VkExtent2D swapChainExtent;
   VkExtent2D displaySizeIdentity;
 
   VkQueue graphicsQueue;
   VkQueue presentQueue;
+
+  std::vector<VkSemaphore> imageAvailableSemaphores;
+  std::vector<VkSemaphore> renderFinishedSemaphores;
+  std::vector<VkFence> inFlightFences;
+  VkSurfaceTransformFlagBitsKHR pretransformFlag;
 };
 
 void HelloVK::initVulkan() {
@@ -210,7 +227,28 @@ void HelloVK::initVulkan() {
   createLogicalDeviceAndQueue();
   setupDebugMessenger();
   establishDisplaySizeIdentity();
+  createSwapChain();
+  createSyncObjects();
   initialized = true;
+}
+
+void HelloVK::reset(ANativeWindow *newWindow, AAssetManager *newManager) {
+  window.reset(newWindow);
+  assetManager = newManager;
+  if (initialized) {
+    createSurface();
+    recreateSwapChain();
+  }
+}
+
+void HelloVK::recreateSwapChain() {
+  vkDeviceWaitIdle(device);
+  cleanupSwapChain();
+  createSwapChain();
+}
+
+void HelloVK::cleanupSwapChain() {
+
 }
 
 void HelloVK::setupDebugMessenger() {
@@ -492,6 +530,101 @@ void HelloVK::establishDisplaySizeIdentity() {
   }
 
   displaySizeIdentity = capabilities.currentExtent;
+}
+
+void HelloVK::createSwapChain() {
+  SwapChainSupportDetails swapChainSupport =
+      querySwapChainSupport(physicalDevice);
+
+  auto chooseSwapSurfaceFormat =
+      [](const std::vector<VkSurfaceFormatKHR> &availableFormats) {
+        for (const auto &availableFormat : availableFormats) {
+          if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB &&
+              availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+            return availableFormat;
+          }
+        }
+        return availableFormats[0];
+      };
+
+  VkSurfaceFormatKHR surfaceFormat =
+      chooseSwapSurfaceFormat(swapChainSupport.formats);
+
+  // Please check
+  // https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkPresentModeKHR.html
+  // for a discourse on different present modes.
+  //
+  // VK_PRESENT_MODE_FIFO_KHR = Hard Vsync
+  // This is always supported on Android phones
+  VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
+
+  uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+  if (swapChainSupport.capabilities.maxImageCount > 0 &&
+      imageCount > swapChainSupport.capabilities.maxImageCount) {
+    imageCount = swapChainSupport.capabilities.maxImageCount;
+  }
+  pretransformFlag = swapChainSupport.capabilities.currentTransform;
+
+  VkSwapchainCreateInfoKHR createInfo{};
+  createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+  createInfo.surface = surface;
+  createInfo.minImageCount = imageCount;
+  createInfo.imageFormat = surfaceFormat.format;
+  createInfo.imageColorSpace = surfaceFormat.colorSpace;
+  createInfo.imageExtent = displaySizeIdentity;
+  createInfo.imageArrayLayers = 1;
+  createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+  createInfo.preTransform = pretransformFlag;
+
+  QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+  uint32_t queueFamilyIndices[] = {indices.graphicsFamily.value(),
+                                   indices.presentFamily.value()};
+
+  if (indices.graphicsFamily != indices.presentFamily) {
+    createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+    createInfo.queueFamilyIndexCount = 2;
+    createInfo.pQueueFamilyIndices = queueFamilyIndices;
+  } else {
+    createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    createInfo.queueFamilyIndexCount = 0;
+    createInfo.pQueueFamilyIndices = nullptr;
+  }
+  createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+  createInfo.presentMode = presentMode;
+  createInfo.clipped = VK_TRUE;
+  createInfo.oldSwapchain = VK_NULL_HANDLE;
+
+  VK_CHECK(vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapChain));
+
+  vkGetSwapchainImagesKHR(device, swapChain, &imageCount, nullptr);
+  swapChainImages.resize(imageCount);
+  vkGetSwapchainImagesKHR(device, swapChain, &imageCount,
+                          swapChainImages.data());
+
+  swapChainImageFormat = surfaceFormat.format;
+  swapChainExtent = displaySizeIdentity;
+}
+
+void HelloVK::createSyncObjects() {
+  imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+  renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+  inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+
+  VkSemaphoreCreateInfo semaphoreInfo{};
+  semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+  VkFenceCreateInfo fenceInfo{};
+  fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+  for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+    VK_CHECK(vkCreateSemaphore(device, &semaphoreInfo, nullptr,
+                               &imageAvailableSemaphores[i]));
+
+    VK_CHECK(vkCreateSemaphore(device, &semaphoreInfo, nullptr,
+                               &renderFinishedSemaphores[i]));
+
+    VK_CHECK(vkCreateFence(device, &fenceInfo, nullptr, &inFlightFences[i]));
+  }
 }
 
 }  // namespace vkt
