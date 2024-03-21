@@ -38,7 +38,8 @@ add_library(${PROJECT_NAME} SHARED
 add_subdirectory(${THIRD_PARTY_DIR}/glm ${CMAKE_CURRENT_BINARY_DIR}/glm)
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
-    ${THIRD_PARTY_DIR}/glm/glm)
+    ${THIRD_PARTY_DIR}/glm/glm
+    ${THIRD_PARTY_DIR}/stb_image)
 
 # add lib dependencies
 target_link_libraries(${PROJECT_NAME} PUBLIC
