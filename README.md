@@ -66,7 +66,7 @@ If you've found an error in these samples, please
 Patches are encouraged, and may be submitted by
 [forking this project](https://github.com/googlesamples/android-ndk/fork) and
 submitting a pull request through GitHub. Please see
-[CONTRIBUTING.md](../CONTRIBUTING.md) for more details.
+[CONTRIBUTING.md](CONTRIBUTING.md) for more details.
 
 - [Stack Overflow](http://stackoverflow.com/questions/tagged/android-ndk)
 - [Android Tools Feedbacks](http://tools.android.com/feedback)
