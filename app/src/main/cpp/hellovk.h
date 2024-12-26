@@ -1345,7 +1345,7 @@ void HelloVK::createRenderPass() {
  * 	- The input assembly is configured to draw triangle lists
  *  - We intend to draw onto the whole screen, so the scissoring extent is
  * specified as being the whole swapchain extent.
- * 	- The rasterizer is set to discard fragmets beyond the near and far
+ * 	- The rasterizer is set to discard fragments beyond the near and far
  * planes (depthClampEnable=false) as well as sending geometry to the frame
  * buffer and generate fragments for the whole area of the geometry. We consider
  * geometry in terms of the clockwise order of their respective vertex input.
